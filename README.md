@@ -1,6 +1,19 @@
-# Secret Calculator
+<p align="center">
+  <img src="secret_calculator/assets/logo.png" alt="Count Me Out logo" width="140">
+</p>
+
+# Count Me Out
 
 A desktop calculator that really works, with a hidden, double-encrypted **Info Locker** behind it.
+The name is a joke: to everyone else it's just a calculator, so count them out of your secrets.
+
+## Screenshots
+
+| The calculator everyone sees | The locker only you can open |
+| --- | --- |
+| ![Count Me Out calculator with history panel](docs/screenshots/calculator.png) | ![Secret Locker with sample entries](docs/screenshots/locker.png) |
+
+*The screenshots use sample data only.*
 
 Practice project for **functions, conditionals and edge cases** in Python.
 
