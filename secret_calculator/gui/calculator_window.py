@@ -9,8 +9,9 @@ import tkinter as tk
 from tkinter import messagebox
 
 from .. import security, storage
-from ..calculator import Calculator
+from ..calculator import Calculator, parse_number
 from ..history import load_history, save_history
+from ..keymap import key_for
 from ..locker import Locker, load_locker, save_locker
 from . import theme
 from .locker_window import LockerWindow
@@ -24,9 +25,7 @@ KEYPAD = [
     [("±", "fn"), ("0", "digit"), (".", "digit"), ("+", "op")],
 ]
 BUTTON_COLORS = {"digit": theme.DIGIT, "fn": theme.FUNCTION, "op": theme.OPERATOR}
-
-KEYSYM_MAP = {"Return": "=", "KP_Enter": "=", "BackSpace": "⌫", "Escape": "C", "Delete": "CE"}
-CHAR_MAP = {"*": "×", "x": "×", "/": "÷", "-": "−", "+": "+", "=": "=", "%": "%", ".": ".", ",": "."}
+FLASH_MS = 120
 
 SETUP_PIN_PROMPT = f"Welcome! Set a secret {security.PIN_LENGTH}-digit PIN, then press ="
 SETUP_CONFIRM_PROMPT = "Type the same PIN again, then press ="
@@ -41,6 +40,7 @@ class CalculatorApp:
         self.setup_stage = None  # None, "pin" or "confirm"
         self.setup_buffer = ""
         self.new_pin = None
+        self.buttons = {}  # key label -> (button, colour), for keyboard flashes
 
         root.title("Calculator")
         root.configure(bg=theme.BG)
@@ -48,10 +48,15 @@ class CalculatorApp:
         self._build_display_and_keypad()
         self._build_history_panel()
         root.bind("<Key>", self._on_keyboard)
+        for sequence in ("<Control-c>", "<Control-C>"):
+            root.bind(sequence, self._copy_display)
+        for sequence in ("<Control-v>", "<Control-V>"):
+            root.bind(sequence, self._paste_number)
 
         if self.config is None:
             self._start_setup()
         self._refresh()
+        self._take_focus()
 
     # ----- layout ---------------------------------------------------------
     def _build_display_and_keypad(self):
@@ -73,9 +78,12 @@ class CalculatorApp:
             row=len(KEYPAD) + 2, column=0, columnspan=4, padx=3, pady=3, sticky="ew")
 
     def _button(self, parent, label, color, width=4):
-        return tk.Button(parent, text=label, width=width, height=1, font=theme.BUTTON_FONT, bg=color,
-                         fg=theme.TEXT, activebackground=theme.MUTED, activeforeground=theme.TEXT,
-                         relief="flat", bd=0, command=lambda: self.on_key(label))
+        # takefocus=0: buttons never hold focus, so Space/Enter can't also press a focused button.
+        button = tk.Button(parent, text=label, width=width, height=1, font=theme.BUTTON_FONT, bg=color,
+                           fg=theme.TEXT, activebackground=theme.MUTED, activeforeground=theme.TEXT,
+                           relief="flat", bd=0, takefocus=0, command=lambda: self.on_key(label))
+        self.buttons[label] = (button, color)
+        return button
 
     def _build_history_panel(self):
         right = tk.Frame(self.root, bg=theme.PANEL, padx=10, pady=10)
@@ -92,13 +100,44 @@ class CalculatorApp:
         self._refresh_history()
 
     # ----- input -------------------------------------------------------------
+    def _take_focus(self):
+        """Give the calculator keyboard focus (at start, and after dialogs/locker close)."""
+        self.root.focus_force()
+
     def _on_keyboard(self, event):
-        if event.keysym in KEYSYM_MAP:
-            self.on_key(KEYSYM_MAP[event.keysym])
-        elif event.char.isdigit():
-            self.on_key(event.char)
-        elif event.char in CHAR_MAP:
-            self.on_key(CHAR_MAP[event.char])
+        key = key_for(event.keysym, event.char)
+        if key is None:
+            return None
+        self._flash(key)
+        self.on_key(key)
+        return "break"
+
+    def _flash(self, key):
+        """Briefly highlight the on-screen button for a key typed on the keyboard."""
+        if key not in self.buttons:
+            return
+        button, color = self.buttons[key]
+        button.config(bg=theme.MUTED)
+        self.root.after(FLASH_MS, lambda: button.config(bg=color))
+
+    def _copy_display(self, _event=None):
+        if self.setup_stage or self.calc.error:
+            return "break"  # never put a PIN being set up on the clipboard
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.calc.display)
+        return "break"
+
+    def _paste_number(self, _event=None):
+        if self.setup_stage:
+            return "break"
+        try:
+            value = parse_number(self.root.clipboard_get())
+        except tk.TclError:
+            value = None  # clipboard empty or not text
+        if value is not None:
+            self.calc.load_value(str(value))
+            self._refresh()
+        return "break"
 
     def on_key(self, key):
         if self.setup_stage:
@@ -200,6 +239,7 @@ class CalculatorApp:
             "Second lock: choose a password (letters and numbers, 6-32 characters).\n"
             "After typing your PIN you will be asked for this password.",
             confirm=True, validator=lambda value: security.validate_password(value, pin))
+        self._take_focus()
         if password is None:
             self._start_setup(f"Setup cancelled. {SETUP_PIN_PROMPT}")
             self._refresh()
@@ -216,6 +256,7 @@ class CalculatorApp:
         messagebox.showinfo("All set", "Your secret is ready.\n\nUse the calculator normally. "
                             "Whenever you type your PIN, you'll be asked for your password.",
                             parent=self.root)
+        self._take_focus()
 
     # ----- secret unlock --------------------------------------------------------
     def _check_secret(self):
@@ -229,6 +270,7 @@ class CalculatorApp:
     def _ask_password(self, pin):
         password = ask_secret(self.root, "Password", "Enter password")
         if password is None or not security.verify_password(password, self.config):
+            self._take_focus()
             return  # quietly back to the calculator
         keys = security.unlock_keys(self.config, pin, password)
         try:
@@ -244,6 +286,7 @@ class CalculatorApp:
         self.calc.clear()
         self._refresh()
         self.root.deiconify()
+        self._take_focus()
 
 
 def main():

@@ -13,6 +13,24 @@ Practice project for **functions, conditionals and edge cases** in Python.
    - A **wrong password or Cancel** quietly returns to the calculator showing `0`. Someone who typed your PIN by accident sees nothing unusual.
 4. Press **Lock**, or close the locker window, to return to the calculator.
 
+### Keyboard
+
+The calculator can be used entirely from the keyboard, either the number row or the numpad. Each on-screen button lights up when you press its key.
+
+| Key | Action |
+| --- | --- |
+| `0`–`9`, `.` or `,` | type a number |
+| `+` `-` `*` (or `x`) `/` | operators |
+| `Enter` or `=` | equals |
+| `%` | percent |
+| `F9` | ± (change sign) |
+| `Backspace` | delete last digit |
+| `Delete` | CE (clear entry) |
+| `Esc` or `c` | C (clear all) |
+| `Ctrl+C` / `Ctrl+V` | copy the result / paste a number |
+
+The secret PIN can also be typed from the keyboard.
+
 ### Rules
 - **PIN:** exactly 8 digits. It can't be all the same digit (`11111111`) or a straight sequence (`12345678`, `87654321`).
 - **Password:** 6–32 characters, with at least one letter and one number, and no spaces at the start or end.
