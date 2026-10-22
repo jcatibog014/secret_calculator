@@ -8,12 +8,13 @@ opens the locker, anything else quietly returns to the calculator.
 import tkinter as tk
 from tkinter import messagebox
 
-from .. import security, storage
+from .. import APP_NAME, security, storage
 from ..calculator import Calculator, parse_number
 from ..history import load_history, save_history
 from ..keymap import key_for
 from ..locker import Locker, load_locker, save_locker
 from . import theme
+from .icon import apply_app_icon, set_windows_app_id
 from .locker_window import LockerWindow
 from .password_dialog import ask_secret
 
@@ -42,7 +43,8 @@ class CalculatorApp:
         self.new_pin = None
         self.buttons = {}  # key label -> (button, colour), for keyboard flashes
 
-        root.title("Calculator")
+        root.title(APP_NAME)
+        apply_app_icon(root)
         root.configure(bg=theme.BG)
         root.resizable(False, False)
         self._build_display_and_keypad()
@@ -290,6 +292,7 @@ class CalculatorApp:
 
 
 def main():
+    set_windows_app_id()
     root = tk.Tk()
     CalculatorApp(root)
     root.mainloop()
