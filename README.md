@@ -94,7 +94,10 @@ secret_calculator/
   locker.py                     locker entries, search, encrypted save/load
   storage.py                    data folder and file helpers
   gui/calculator_window.py      calculator UI, first-run setup, secret trigger
-  gui/password_dialog.py        masked password dialog
-  gui/locker_window.py          Info Locker UI
+  gui/locker_window.py          Info Locker UI (categories | items | details)
+  gui/dialogs.py                password, confirm and message dialogs
+  gui/theme.py                  colours, fonts, category colours, icon glyphs
+  gui/widgets.py                shared UI helpers (clickable cards, window sizing)
+  gui/icon.py                   app icon
 tests/                          pytest unit tests
 ```

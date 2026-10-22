@@ -6,7 +6,8 @@ opens the locker, anything else quietly returns to the calculator.
 """
 
 import tkinter as tk
-from tkinter import messagebox
+
+import customtkinter as ctk
 
 from .. import APP_NAME, security, storage
 from ..calculator import Calculator, parse_number
@@ -14,19 +15,30 @@ from ..history import load_history, save_history
 from ..keymap import key_for
 from ..locker import Locker, load_locker, save_locker
 from . import theme
+from .dialogs import ask_secret, show_message
 from .icon import apply_app_icon, set_windows_app_id
 from .locker_window import LockerWindow
-from .password_dialog import ask_secret
+from .widgets import clear_children, fit_window, make_clickable
 
 KEYPAD = [
-    [("%", "fn"), ("CE", "fn"), ("C", "fn"), ("⌫", "fn")],
+    [("%", "fn"), ("CE", "fn"), ("C", "clear"), ("⌫", "fn")],
     [("7", "digit"), ("8", "digit"), ("9", "digit"), ("÷", "op")],
     [("4", "digit"), ("5", "digit"), ("6", "digit"), ("×", "op")],
     [("1", "digit"), ("2", "digit"), ("3", "digit"), ("−", "op")],
-    [("±", "fn"), ("0", "digit"), (".", "digit"), ("+", "op")],
+    [("±", "digit"), ("0", "digit"), (".", "digit"), ("+", "op")],
 ]
-BUTTON_COLORS = {"digit": theme.DIGIT, "fn": theme.FUNCTION, "op": theme.OPERATOR}
+# kind -> (background, hover, text colour, font size)
+KEY_STYLES = {
+    "digit": (theme.SURFACE_ALT, theme.HOVER, theme.TEXT, 22),
+    "fn": (theme.BLUE_KEY, theme.BLUE_KEY_HOVER, theme.BLUE_TEXT, 19),
+    "clear": (theme.CORAL_KEY, theme.CORAL_KEY_HOVER, theme.CORAL, 19),
+    "op": (theme.SURFACE, theme.HOVER, theme.AMBER, 26),
+    "equals": (theme.AMBER, theme.AMBER_HOVER, theme.ON_AMBER, 26),
+}
+KEY_WIDTH = 78
+KEY_GAP = 8
 FLASH_MS = 120
+DISPLAY_SIZE, DISPLAY_SIZE_SMALL = 56, 34
 
 SETUP_PIN_PROMPT = f"Welcome! Set a secret {security.PIN_LENGTH}-digit PIN, then press ="
 SETUP_CONFIRM_PROMPT = "Type the same PIN again, then press ="
@@ -45,10 +57,11 @@ class CalculatorApp:
 
         root.title(APP_NAME)
         apply_app_icon(root)
-        root.configure(bg=theme.BG)
+        root.configure(fg_color=theme.BG)
         root.resizable(False, False)
         self._build_display_and_keypad()
         self._build_history_panel()
+        fit_window(root)
         root.bind("<Key>", self._on_keyboard)
         for sequence in ("<Control-c>", "<Control-C>"):
             root.bind(sequence, self._copy_display)
@@ -62,43 +75,54 @@ class CalculatorApp:
 
     # ----- layout ---------------------------------------------------------
     def _build_display_and_keypad(self):
-        left = tk.Frame(self.root, bg=theme.BG, padx=10, pady=10)
-        left.grid(row=0, column=0, sticky="n")
+        left = ctk.CTkFrame(self.root, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="n", padx=(22, 14), pady=22)
+        keypad_width = 4 * KEY_WIDTH + 3 * KEY_GAP
 
-        self.expression_label = tk.Label(left, text="", anchor="e", justify="right", bg=theme.BG,
-                                         fg=theme.MUTED, font=theme.EXPRESSION_FONT, wraplength=300,
-                                         height=2)
+        self.expression_label = ctk.CTkLabel(left, text="", anchor="e", justify="right",
+                                             text_color=theme.MUTED, font=theme.font(15),
+                                             wraplength=keypad_width, height=44, width=keypad_width)
         self.expression_label.grid(row=0, column=0, columnspan=4, sticky="ew")
-        self.display_label = tk.Label(left, text="0", anchor="e", bg=theme.BG, fg=theme.TEXT,
-                                      font=theme.DISPLAY_FONT, width=14)
-        self.display_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 8))
+        self.display_font = theme.font(DISPLAY_SIZE, family=theme.LIGHT_FAMILY)
+        self.display_label = ctk.CTkLabel(left, text="0", anchor="e", text_color=theme.TEXT,
+                                          font=self.display_font, height=76, width=keypad_width)
+        self.display_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(0, 14))
 
         for r, row in enumerate(KEYPAD, start=2):
             for c, (label, kind) in enumerate(row):
-                self._button(left, label, BUTTON_COLORS[kind]).grid(row=r, column=c, padx=3, pady=3)
-        self._button(left, "=", theme.OPERATOR, width=19).grid(
-            row=len(KEYPAD) + 2, column=0, columnspan=4, padx=3, pady=3, sticky="ew")
+                self._button(left, label, kind).grid(row=r, column=c, padx=(0 if c == 0 else KEY_GAP, 0),
+                                                     pady=(0, KEY_GAP))
+        self._button(left, "=", "equals", width=keypad_width).grid(
+            row=len(KEYPAD) + 2, column=0, columnspan=4, sticky="ew")
 
-    def _button(self, parent, label, color, width=4):
-        # takefocus=0: buttons never hold focus, so Space/Enter can't also press a focused button.
-        button = tk.Button(parent, text=label, width=width, height=1, font=theme.BUTTON_FONT, bg=color,
-                           fg=theme.TEXT, activebackground=theme.MUTED, activeforeground=theme.TEXT,
-                           relief="flat", bd=0, takefocus=0, command=lambda: self.on_key(label))
-        self.buttons[label] = (button, color)
+    def _button(self, parent, label, kind, width=KEY_WIDTH):
+        color, hover, text_color, size = KEY_STYLES[kind]
+        button = ctk.CTkButton(parent, text=label, width=width, height=theme.KEY_HEIGHT, corner_radius=16,
+                               fg_color=color, hover_color=hover, text_color=text_color,
+                               font=theme.font(size), command=lambda: self.on_key(label))
+        self.buttons[label] = (button, color, hover)
         return button
 
     def _build_history_panel(self):
-        right = tk.Frame(self.root, bg=theme.PANEL, padx=10, pady=10)
-        right.grid(row=0, column=1, sticky="ns")
-        tk.Label(right, text="History", bg=theme.PANEL, fg=theme.TEXT,
-                 font=(theme.FONT, 12, "bold")).pack(anchor="w")
-        self.history_list = tk.Listbox(right, width=28, height=17, bg=theme.PANEL, fg=theme.TEXT,
-                                       selectbackground=theme.FUNCTION, highlightthickness=0,
-                                       relief="flat", font=theme.BODY_FONT, activestyle="none")
-        self.history_list.pack(fill="both", expand=True, pady=6)
-        self.history_list.bind("<<ListboxSelect>>", self._on_history_pick)
-        tk.Button(right, text="Clear history", command=self._clear_history, relief="flat",
-                  bg=theme.FUNCTION, fg=theme.TEXT).pack(fill="x")
+        right = ctk.CTkFrame(self.root, fg_color=theme.SURFACE, corner_radius=18, width=290)
+        right.grid(row=0, column=1, sticky="nsew", padx=(0, 22), pady=22)
+        right.grid_rowconfigure(1, weight=1)
+        right.grid_propagate(False)
+        right.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(right, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 6))
+        ctk.CTkLabel(header, text="History", text_color=theme.TEXT, font=theme.font(17, "bold")
+                     ).pack(side="left")
+        ctk.CTkButton(header, text="Clear", width=64, height=theme.BUTTON_HEIGHT, corner_radius=theme.RADIUS,
+                      fg_color="transparent", hover_color=theme.HOVER, text_color=theme.MUTED,
+                      font=theme.font(13), command=self._clear_history).pack(side="right")
+
+        self.history_frame = ctk.CTkScrollableFrame(right, fg_color="transparent",
+                                                    scrollbar_button_color=theme.SURFACE_ALT,
+                                                    scrollbar_button_hover_color=theme.HOVER)
+        self.history_frame.grid(row=1, column=0, sticky="nsew", padx=(10, 6), pady=(0, 12))
+        self.history_frame.grid_columnconfigure(0, weight=1)
         self._refresh_history()
 
     # ----- input -------------------------------------------------------------
@@ -118,9 +142,9 @@ class CalculatorApp:
         """Briefly highlight the on-screen button for a key typed on the keyboard."""
         if key not in self.buttons:
             return
-        button, color = self.buttons[key]
-        button.config(bg=theme.MUTED)
-        self.root.after(FLASH_MS, lambda: button.config(bg=color))
+        button, color, hover = self.buttons[key]
+        button.configure(fg_color=hover)
+        self.root.after(FLASH_MS, lambda: button.configure(fg_color=color))
 
     def _copy_display(self, _event=None):
         if self.setup_stage or self.calc.error:
@@ -172,25 +196,36 @@ class CalculatorApp:
         if key.isdigit():
             self._check_secret()
 
+    def _set_display(self, text, color=theme.TEXT):
+        self.display_font.configure(size=DISPLAY_SIZE if len(text) <= 10 else DISPLAY_SIZE_SMALL)
+        self.display_label.configure(text=text, text_color=color)
+
     def _refresh(self):
         if self.setup_stage:
-            self.display_label.config(text=self.setup_buffer or "0")
+            self._set_display(self.setup_buffer or "0")
             return
-        text = self.calc.display
-        size = 34 if len(text) <= 12 else 22
-        self.display_label.config(text=text, font=(theme.FONT, size))
-        self.expression_label.config(text=self.calc.expression)
+        self._set_display(self.calc.display, theme.CORAL if self.calc.error else theme.TEXT)
+        self.expression_label.configure(text=self.calc.expression)
 
     # ----- history -----------------------------------------------------------
     def _refresh_history(self):
-        self.history_list.delete(0, "end")
-        for item in self.history:
-            self.history_list.insert("end", f"{item['expression']} = {item['result']}")
+        clear_children(self.history_frame)
+        if not len(self.history):
+            ctk.CTkLabel(self.history_frame, text="No calculations yet", text_color=theme.MUTED,
+                         font=theme.font(13)).grid(row=0, column=0, pady=24)
+            return
+        for index, item in enumerate(self.history):
+            card = ctk.CTkFrame(self.history_frame, fg_color=theme.SURFACE_ALT, corner_radius=theme.RADIUS)
+            card.grid(row=index, column=0, sticky="ew", pady=(0, 8))
+            ctk.CTkLabel(card, text=item["expression"], text_color=theme.MUTED, font=theme.font(12),
+                         anchor="e", height=18).pack(fill="x", padx=14, pady=(10, 0))
+            ctk.CTkLabel(card, text=item["result"], text_color=theme.TEXT, font=theme.font(19, "bold"),
+                         anchor="e", height=26).pack(fill="x", padx=14, pady=(0, 10))
+            make_clickable(card, lambda i=index: self._on_history_pick(i), theme.SURFACE_ALT, theme.HOVER)
 
-    def _on_history_pick(self, _event):
-        selection = self.history_list.curselection()
-        if selection and not self.setup_stage:
-            self.calc.load_value(self.history.items[selection[0]]["result"])
+    def _on_history_pick(self, index):
+        if not self.setup_stage:
+            self.calc.load_value(self.history.items[index]["result"])
             self._refresh()
 
     def _clear_history(self):
@@ -203,7 +238,7 @@ class CalculatorApp:
         self.setup_stage = "pin"
         self.setup_buffer = ""
         self.new_pin = None
-        self.expression_label.config(text=message, fg=theme.OPERATOR)
+        self.expression_label.configure(text=message, text_color=theme.AMBER)
 
     def _setup_key(self, key):
         if key.isdigit():
@@ -222,11 +257,11 @@ class CalculatorApp:
         if self.setup_stage == "pin":
             error = security.validate_pin(typed)
             if error:
-                self.expression_label.config(text=f"{error}. {SETUP_PIN_PROMPT}")
+                self.expression_label.configure(text=f"{error}. {SETUP_PIN_PROMPT}")
                 return
             self.new_pin = typed
             self.setup_stage = "confirm"
-            self.expression_label.config(text=SETUP_CONFIRM_PROMPT)
+            self.expression_label.configure(text=SETUP_CONFIRM_PROMPT)
             return
         if typed != self.new_pin:
             self._start_setup(f"PINs didn't match. {SETUP_PIN_PROMPT}")
@@ -253,11 +288,10 @@ class CalculatorApp:
         self.setup_stage = None
         self.new_pin = None
         self.calc.clear()
-        self.expression_label.config(fg=theme.MUTED)
+        self.expression_label.configure(text_color=theme.MUTED)
         self._refresh()
-        messagebox.showinfo("All set", "Your secret is ready.\n\nUse the calculator normally. "
-                            "Whenever you type your PIN, you'll be asked for your password.",
-                            parent=self.root)
+        show_message(self.root, "All set", "Your secret is ready.\n\nUse the calculator normally. "
+                     "Whenever you type your PIN, you'll be asked for your password.")
         self._take_focus()
 
     # ----- secret unlock --------------------------------------------------------
@@ -278,7 +312,7 @@ class CalculatorApp:
         try:
             locker = load_locker(keys)
         except security.InvalidToken:
-            messagebox.showerror("Locker", "The locker file could not be opened.", parent=self.root)
+            show_message(self.root, "Locker", "The locker file could not be opened.")
             return
         self.root.withdraw()
         LockerWindow(self.root, locker, keys, self.config, on_close=self._on_locker_closed)
@@ -293,6 +327,7 @@ class CalculatorApp:
 
 def main():
     set_windows_app_id()
-    root = tk.Tk()
+    theme.setup()
+    root = ctk.CTk()
     CalculatorApp(root)
     root.mainloop()
