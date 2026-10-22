@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# app data lives in %APPDATA%, but never commit stray copies
+config.json
+locker.enc
+history.json
+*.tmp
