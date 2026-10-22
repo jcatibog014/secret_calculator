@@ -21,12 +21,14 @@ def set_windows_app_id():
 
 
 def apply_app_icon(root):
-    """Use the logo for this window and every dialog/window opened after it."""
+    """Use the logo for this window and every dialog/window opened after it.
+
+    Only iconphoto: on Windows, also calling iconbitmap(default=...) makes Tk fall back
+    to the generic window icon.
+    """
     try:
         images = [tk.PhotoImage(file=ASSETS / f"icon-{size}.png") for size in ICON_SIZES]
         root.iconphoto(True, *images)
         root._app_icons = images  # keep a reference so Tk doesn't drop the images
-        if sys.platform == "win32":
-            root.iconbitmap(default=ASSETS / "icon.ico")
     except tk.TclError:
         pass  # a missing icon file should never stop the calculator from opening

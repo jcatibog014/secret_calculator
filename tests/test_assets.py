@@ -13,7 +13,3 @@ def test_app_name():
 @pytest.mark.parametrize("name", ["logo.png", *(f"icon-{size}.png" for size in ICON_SIZES)])
 def test_png_icons_present(name):
     assert (ASSETS / name).read_bytes().startswith(PNG_SIGNATURE)
-
-
-def test_windows_icon_present():
-    assert (ASSETS / "icon.ico").read_bytes()[:4] == b"\x00\x00\x01\x00"
