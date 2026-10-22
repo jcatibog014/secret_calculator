@@ -4,6 +4,7 @@ import pytest
 
 from secret_calculator.calculator import (
     MAX_DIGITS, Calculator, CalculatorError, apply_percent, calculate, display_entry, format_number,
+    parse_number,
 )
 
 
@@ -58,6 +59,18 @@ def test_display_entry_strips_leading_zeros():
     assert display_entry("00.5") == "0.5"
     assert display_entry("-0012") == "-12"
     assert display_entry("0") == "0"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("42", "42"), (" 1,234.5 \n", "1234.5"), ("−7", "-7"), ("-0.25", "-0.25"), ("1e3", "1000"),
+])
+def test_parse_number(text, expected):
+    assert parse_number(text) == Decimal(expected)
+
+
+@pytest.mark.parametrize("text", ["", "   ", "abc", "1+1", "NaN", "Infinity", "1" * (MAX_DIGITS + 1)])
+def test_parse_number_rejects(text):
+    assert parse_number(text) is None
 
 
 def test_apply_percent():

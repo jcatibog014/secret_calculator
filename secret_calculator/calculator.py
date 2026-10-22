@@ -79,6 +79,20 @@ def format_number(value):
     return "0" if text in ("-0", "") else text
 
 
+def parse_number(text):
+    """Read a pasted number like ' 1,234.5 ' or '−7'. Returns a Decimal, or None if invalid."""
+    cleaned = text.strip().replace(",", "").replace(" ", "").replace("−", "-")
+    if not cleaned:
+        return None
+    try:
+        value = Decimal(cleaned)
+    except InvalidOperation:
+        return None
+    if not value.is_finite() or count_digits(cleaned) > MAX_DIGITS:
+        return None
+    return value
+
+
 def count_digits(entry):
     """How many digits an entry contains (sign and decimal point don't count)."""
     return sum(ch.isdigit() for ch in entry)
