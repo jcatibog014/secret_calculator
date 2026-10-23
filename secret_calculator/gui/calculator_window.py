@@ -131,7 +131,7 @@ class CalculatorApp:
         self.root.focus_force()
 
     def _on_keyboard(self, event):
-        key = key_for(event.keysym, event.char)
+        key = key_for(event.keysym, event.char, event.state)
         if key is None:
             return None
         self._flash(key)
