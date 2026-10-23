@@ -7,6 +7,14 @@
 A desktop calculator that really works, with a hidden, double-encrypted **Info Locker** behind it.
 The name is a joke: to everyone else it's just a calculator, so count them out of your secrets.
 
+## Demo
+
+<p align="center">
+  <img src="docs/demo.gif" alt="Demo: calculating, typing the secret PIN and password, browsing and adding to the locker, then locking it again" width="820">
+</p>
+
+The demo shows normal calculations, then typing the secret PIN and the password. It then browses the locker, adds an item, and locks it again. *It uses sample data only.*
+
 ## Screenshots
 
 | The calculator everyone sees | The locker only you can open |
