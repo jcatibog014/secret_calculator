@@ -20,12 +20,23 @@ def set_windows_app_id():
         pass
 
 
+def keep_app_icon(window):
+    """Stop CustomTkinter swapping in its own icon 200 ms after a window opens.
+
+    CTk does that with iconbitmap(), and on Windows mixing iconbitmap with our
+    iconphoto makes Tk fall back to the generic window icon. Setting this flag is how
+    CTk itself tracks "the app already chose an icon".
+    """
+    window._iconbitmap_method_called = True
+
+
 def apply_app_icon(root):
     """Use the logo for this window and every dialog/window opened after it.
 
     Only iconphoto: on Windows, also calling iconbitmap(default=...) makes Tk fall back
     to the generic window icon.
     """
+    keep_app_icon(root)
     try:
         images = [tk.PhotoImage(file=ASSETS / f"icon-{size}.png") for size in ICON_SIZES]
         root.iconphoto(True, *images)
