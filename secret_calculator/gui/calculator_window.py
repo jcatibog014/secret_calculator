@@ -44,6 +44,15 @@ SETUP_PIN_PROMPT = f"Welcome! Set a secret {security.PIN_LENGTH}-digit PIN, then
 SETUP_CONFIRM_PROMPT = "Type the same PIN again, then press ="
 
 
+def pin_slots(typed, length=security.PIN_LENGTH):
+    """PIN setup display: every digit typed so far (a leading 0 too), then a blank per missing digit."""
+    return " ".join(list(typed) + ["_"] * (length - len(typed)))
+
+
+def pin_counter(typed, length=security.PIN_LENGTH):
+    return f"{len(typed)} of {length} digits"
+
+
 class CalculatorApp:
     def __init__(self, root):
         self.root = root
@@ -52,6 +61,7 @@ class CalculatorApp:
         self.config = storage.read_json(storage.config_path())
         self.setup_stage = None  # None, "pin" or "confirm"
         self.setup_buffer = ""
+        self.setup_message = ""
         self.new_pin = None
         self.buttons = {}  # key label -> (button, colour), for keyboard flashes
 
@@ -202,7 +212,8 @@ class CalculatorApp:
 
     def _refresh(self):
         if self.setup_stage:
-            self._set_display(self.setup_buffer or "0")
+            self._set_display(pin_slots(self.setup_buffer))
+            self.expression_label.configure(text=f"{self.setup_message}\n{pin_counter(self.setup_buffer)}")
             return
         self._set_display(self.calc.display, theme.CORAL if self.calc.error else theme.TEXT)
         self.expression_label.configure(text=self.calc.expression)
@@ -238,7 +249,8 @@ class CalculatorApp:
         self.setup_stage = "pin"
         self.setup_buffer = ""
         self.new_pin = None
-        self.expression_label.configure(text=message, text_color=theme.AMBER)
+        self.setup_message = message
+        self.expression_label.configure(text_color=theme.AMBER)
 
     def _setup_key(self, key):
         if key.isdigit():
@@ -257,14 +269,14 @@ class CalculatorApp:
         if self.setup_stage == "pin":
             error = security.validate_pin(typed)
             if error:
-                self.expression_label.configure(text=f"{error}. {SETUP_PIN_PROMPT}")
+                self.setup_message = f"{error}, try again"
                 return
             self.new_pin = typed
             self.setup_stage = "confirm"
-            self.expression_label.configure(text=SETUP_CONFIRM_PROMPT)
+            self.setup_message = SETUP_CONFIRM_PROMPT
             return
         if typed != self.new_pin:
-            self._start_setup(f"PINs didn't match. {SETUP_PIN_PROMPT}")
+            self._start_setup("PINs didn't match, set your PIN again")
             return
         self._refresh()
         self.root.after(50, self._setup_password)
@@ -278,7 +290,7 @@ class CalculatorApp:
             confirm=True, validator=lambda value: security.validate_password(value, pin))
         self._take_focus()
         if password is None:
-            self._start_setup(f"Setup cancelled. {SETUP_PIN_PROMPT}")
+            self._start_setup("Setup cancelled, set your PIN again")
             self._refresh()
             return
         config = security.create_credentials(pin, password)
